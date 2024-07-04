@@ -1,11 +1,13 @@
 'use strict';
 
 import { App, LogLevel } from '@slack/bolt';
-import * as http from 'http';
-import express from 'express';
+import { db } from './firebase';
 import dotenv from 'dotenv';
+import { addDoc, collection } from 'firebase/firestore';
 
 dotenv.config();
+
+const event: any[] = []
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -28,11 +30,76 @@ app.command('/rule', async ({ command, ack, respond }) => {
     await respond(rules);
 });
 
-app.command('/add-event', async ({ command, ack, respond }) => {
+app.view('add-event', async ({ ack, body, view, respond }) => {
+    console.log(body);
+    await ack();
+
+    const val = view.state.values
+    const event = val.event.event.value
+    const date = val.date.date.selected_date
+
+    try {
+        await addDoc(collection(db, 'events'), {
+            event,
+            date
+        });
+        await respond('イベントを追加しました。');
+    } catch (error) {
+        console.error('Error adding document: ', error);
+        await respond('イベントの追加に失敗しました。');
+    }
+});
+
+app.command('/add-event', async ({ command, ack, body, client, logger, respond }) => {
     await ack();
     const user = await app.client.users.info({ user: command.user_id });
     if (user.user?.is_admin) {
-        await respond(`予定が追加されました: ${command.text}`);
+        try {
+            await client.views.open({
+                trigger_id: body.trigger_id,
+                view: {
+                    type: 'modal',
+                    callback_id: 'add-event',
+                    title: {
+                        type: 'plain_text',
+                        text: 'イベント追加'
+                    },
+                    blocks: [
+                        {
+                            type: 'input',
+                            block_id: 'event',
+                            element: {
+                                type: 'plain_text_input',
+                                action_id: 'event'
+                            },
+                            label: {
+                                type: 'plain_text',
+                                text: 'イベント'
+                            }
+                        },
+                        {
+                            type: 'input',
+                            block_id: 'date',
+                            element: {
+                                type: 'datepicker',
+                                action_id: 'date'
+                            },
+                            label: {
+                                type: 'plain_text',
+                                text: '日付'
+                            }
+                        }
+                    ],
+                    submit: {
+                        type: 'plain_text',
+                        text: '追加'
+                    }
+                }
+            });
+        } catch (error) {
+            logger.error(error);
+            await respond('イベントの追加に失敗しました。');
+        }
     } else {
         await respond("権限がありません。");
     }
