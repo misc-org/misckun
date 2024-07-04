@@ -1,0 +1,17 @@
+{
+  "name": "misckun",
+  "version": "1.0.0",
+  "description": "bot for slack of misc",
+  "main": "index.ts",
+  "scripts": {
+    "test": "start"
+  },
+  "author": "shiki-01",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.19.0",
+    "@types/node": "^20.14.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.3"
+  }
+}
