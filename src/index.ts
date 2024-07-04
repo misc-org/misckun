@@ -123,9 +123,10 @@ app.action('view_more', async ({ ack, body, client, action }) => {
     await ack();
 
     try {
-        if (body.type !== 'block_actions' || !body.view) {
+        if (body.type !== 'block_actions' || !body.view || !body.actions[0].value) {
             return;
         }
+        console.log(body);
         await client.views.open({
             trigger_id: body.trigger_id,
             view: {
@@ -139,7 +140,7 @@ app.action('view_more', async ({ ack, body, client, action }) => {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `*日付:* ${body.view.state.values.date.date.selected_date}\n*イベント:* ${body.view.state.values.event.event.value}`
+                            text: `*日付:* ${body.actions[0].value.date.text}\n*イベント:* ${body.actions[0].value.event.text}\n*詳細:* ${body.actions[0].value.desc.text}`
                         }
                     }
                 ]
@@ -168,7 +169,11 @@ app.command('/event', async ({ command, ack, respond, client }) => {
                     type: 'plain_text',
                     text: '詳細を見る'
                 },
-                value: doc.id,
+                value: JSON.stringify({
+                    date: { text: event.date },
+                    event: { text: event.event },
+                    desc: { text: event.desc }
+                }),
                 action_id: 'view_more'
             }
         };
@@ -178,6 +183,7 @@ app.command('/event', async ({ command, ack, respond, client }) => {
         trigger_id: command.trigger_id,
         view: {
             type: 'modal',
+            callback_id: 'view_more',
             title: {
                 type: 'plain_text',
                 text: 'イベント一覧',
