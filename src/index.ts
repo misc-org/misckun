@@ -3,7 +3,7 @@
 import { App, LogLevel } from '@slack/bolt';
 import { db } from './firebase';
 import dotenv from 'dotenv';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -30,23 +30,31 @@ app.command('/rule', async ({ command, ack, respond }) => {
     await respond(rules);
 });
 
-app.view('add-event', async ({ ack, body, view, respond }) => {
-    console.log(body);
+app.view('event-add', async ({ ack, body, view, logger, client }) => {
+    logger.info(body);
     await ack();
 
     const val = view.state.values
     const event = val.event.event.value
     const date = val.date.date.selected_date
 
+    const root = process.env.FIREBASE_RULE as string
+
     try {
-        await addDoc(collection(db, 'events'), {
+        await addDoc(collection(db, 'events', root, 'event'), {
             event,
             date
         });
-        await respond('イベントを追加しました。');
+        await client.chat.postMessage({
+            channel: body.user.id,
+            text: 'イベントを追加しました。'
+        });
     } catch (error) {
-        console.error('Error adding document: ', error);
-        await respond('イベントの追加に失敗しました。');
+        logger.error(error);
+        await client.chat.postMessage({
+            channel: body.user.id,
+            text: 'イベントの追加に失敗しました。'
+        });
     }
 });
 
@@ -55,11 +63,16 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
     const user = await app.client.users.info({ user: command.user_id });
     if (user.user?.is_admin) {
         try {
+            const triggerId = body.trigger_id;
+            if (!triggerId) {
+                await respond('イベントの追加に失敗しました。');
+                return;
+            }
             await client.views.open({
-                trigger_id: body.trigger_id,
+                trigger_id: triggerId,
                 view: {
                     type: 'modal',
-                    callback_id: 'add-event',
+                    callback_id: 'event-add',
                     title: {
                         type: 'plain_text',
                         text: 'イベント追加'
@@ -96,6 +109,7 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                     }
                 }
             });
+            logger.info('イベント追加モーダルを表示しました。');
         } catch (error) {
             logger.error(error);
             await respond('イベントの追加に失敗しました。');
@@ -105,13 +119,72 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
     }
 });
 
-app.command('/event', async ({ command, ack, respond }) => {
+app.action('view_more', async ({ ack, body, client, action }) => {
     await ack();
-    const events = `
-    - 7月5日 10:00 会議
-    - 7月6日 15:00 勉強会
-  `;
-    await respond(events);
+
+    try {
+        if (body.type !== 'block_actions' || !body.view) {
+            return;
+        }
+        await client.views.open({
+            trigger_id: body.trigger_id,
+            view: {
+                type: 'modal',
+                title: {
+                    type: 'plain_text',
+                    text: 'イベント詳細'
+                },
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `*日付:* ${body.view.state.values.date.date.selected_date}\n*イベント:* ${body.view.state.values.event.event.value}`
+                        }
+                    }
+                ]
+            }
+        });
+    } catch (error) {
+
+    }
+});
+
+app.command('/event', async ({ command, ack, respond, client }) => {
+    await ack();
+    const root = process.env.FIREBASE_RULE as string;
+    const querySnapshot = await getDocs(collection(db, "events", root, "event"));
+    const events = querySnapshot.docs.map(doc => {
+        const event = doc.data();
+        return {
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: `*日付:* ${event.date}\n*イベント:* ${event.event}`
+            },
+            accessory: {
+                type: 'button',
+                text: {
+                    type: 'plain_text',
+                    text: '詳細を見る'
+                },
+                value: doc.id,
+                action_id: 'view_more'
+            }
+        };
+    });
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: 'modal',
+            title: {
+                type: 'plain_text',
+                text: 'イベント一覧',
+            },
+            blocks: events,
+        },
+    });
 });
 
 app.command('/desctop', async ({ command, ack, respond }) => {
