@@ -5,7 +5,8 @@
   "main": "index.ts",
   "scripts": {
     "test": "start",
-    "start": "ts-node src/index.ts"
+    "start": "ts-node src/index.ts",
+    "build": "rollup -c"
   },
   "author": "shiki-01",
   "license": "MIT",
@@ -14,7 +15,17 @@
     "@types/node": "^20.14.9",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "moment": "^2.30.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-runtime": "^7.24.7",
+    "@babel/preset-env": "^7.24.7",
+    "@babel/preset-typescript": "^7.24.7",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@types/google-apps-script": "^1.0.83",
+    "rollup": "^4.18.0"
   }
 }

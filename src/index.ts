@@ -5,6 +5,14 @@ import { db } from './firebase';
 import dotenv from 'dotenv';
 import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
 
+import moment from "moment";
+
+const main = () => {
+  const now = moment();
+  Logger.log(now.format());
+};
+
+
 dotenv.config();
 
 const event: any[] = []
