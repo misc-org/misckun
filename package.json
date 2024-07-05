@@ -2,6 +2,7 @@
   "name": "misckun",
   "version": "1.0.0",
   "description": "bot for slack of misc",
+  "type": "module",
   "main": "index.ts",
   "scripts": {
     "test": "start",
