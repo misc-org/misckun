@@ -3,10 +3,7 @@ import { db } from './firebase';
 import dotenv from 'dotenv';
 import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
 
-
 dotenv.config();
-
-const event: any[] = []
 
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
@@ -108,7 +105,6 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                     }
                 }
             });
-            logger.info('イベント追加モーダルを表示しました。');
         } catch (error) {
             logger.error(error);
             await respond('イベントの追加に失敗しました。');
