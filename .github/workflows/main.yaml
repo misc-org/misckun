@@ -1,10 +1,9 @@
-
 name: Deploy To Glitch
 on:
   push:
     branches:
       - main
-    workflow_dispatch:
+  workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -14,4 +13,3 @@ jobs:
         with:
           project-id: ${{ secrets.PROJECT_ID }}
           auth-token: ${{ secrets.AUTH_TOKEN }}
-
