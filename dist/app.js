@@ -1,73 +1,78 @@
-import { App, LogLevel } from '@slack/bolt';
-import { db } from './firebase';
-import dotenv from 'dotenv';
-import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
-
-
-dotenv.config();
-
-const event: any[] = []
-
-const app = new App({
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const bolt_1 = require("@slack/bolt");
+const firebase_1 = require("./firebase");
+const dotenv_1 = __importDefault(require("dotenv"));
+const firestore_1 = require("firebase/firestore");
+dotenv_1.default.config();
+const event = [];
+const app = new bolt_1.App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
-    logLevel: LogLevel.DEBUG
+    logLevel: bolt_1.LogLevel.DEBUG
 });
-
-app.event('app_home_opened', async ({ event, client, ack }) => {
-    await client.chat.postMessage({
+app.event('app_home_opened', (_a) => __awaiter(void 0, [_a], void 0, function* ({ event, client, ack }) {
+    yield client.chat.postMessage({
         channel: event.channel,
         text: 'こんにちは！私は部活動サポートボットです。'
     });
-});
-
-app.command('/rule', async ({ command, ack, respond }) => {
-    await ack();
+}));
+app.command('/rule', (_a) => __awaiter(void 0, [_a], void 0, function* ({ command, ack, respond }) {
+    yield ack();
     const rules = `
     1. 部室は清潔に保つ\n2. パソコンは丁寧に扱う\n3. 予定は必ずカレンダーに記入する
   `;
-    await respond(rules);
-});
-
-app.view('event-add', async ({ ack, body, view, logger, client }) => {
+    yield respond(rules);
+}));
+app.view('event-add', (_a) => __awaiter(void 0, [_a], void 0, function* ({ ack, body, view, logger, client }) {
     logger.info(body);
-    await ack();
-
-    const val = view.state.values
-    const event = val.event.event.value
-    const date = val.date.date.selected_date
-
-    const root = process.env.FIREBASE_RULE as string
-
+    yield ack();
+    const val = view.state.values;
+    const event = val.event.event.value;
+    const date = val.date.date.selected_date;
+    const root = process.env.FIREBASE_RULE;
     try {
-        await addDoc(collection(db, 'events', root, 'event'), {
+        yield (0, firestore_1.addDoc)((0, firestore_1.collection)(firebase_1.db, 'events', root, 'event'), {
             event,
             date
         });
-        await client.chat.postMessage({
+        yield client.chat.postMessage({
             channel: body.user.id,
             text: 'イベントを追加しました。'
         });
-    } catch (error) {
+    }
+    catch (error) {
         logger.error(error);
-        await client.chat.postMessage({
+        yield client.chat.postMessage({
             channel: body.user.id,
             text: 'イベントの追加に失敗しました。'
         });
     }
-});
-
-app.command('/add-event', async ({ command, ack, body, client, logger, respond }) => {
-    await ack();
-    const user = await app.client.users.info({ user: command.user_id });
-    if (user.user?.is_admin) {
+}));
+app.command('/add-event', (_a) => __awaiter(void 0, [_a], void 0, function* ({ command, ack, body, client, logger, respond }) {
+    var _b;
+    yield ack();
+    const user = yield app.client.users.info({ user: command.user_id });
+    if ((_b = user.user) === null || _b === void 0 ? void 0 : _b.is_admin) {
         try {
             const triggerId = body.trigger_id;
             if (!triggerId) {
-                await respond('イベントの追加に失敗しました。');
+                yield respond('イベントの追加に失敗しました。');
                 return;
             }
-            await client.views.open({
+            yield client.views.open({
                 trigger_id: triggerId,
                 view: {
                     type: 'modal',
@@ -109,38 +114,36 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                 }
             });
             logger.info('イベント追加モーダルを表示しました。');
-        } catch (error) {
-            logger.error(error);
-            await respond('イベントの追加に失敗しました。');
         }
-    } else {
-        await respond("権限がありません。");
+        catch (error) {
+            logger.error(error);
+            yield respond('イベントの追加に失敗しました。');
+        }
     }
-});
-
-app.view('report', async ({ ack, body, view, client }) => {
-    await ack();
-
+    else {
+        yield respond("権限がありません。");
+    }
+}));
+app.view('report', (_a) => __awaiter(void 0, [_a], void 0, function* ({ ack, body, view, client }) {
+    yield ack();
     const user = body.user.id;
     const values = view.state.values;
     const reason = values.reason.reason.value;
-    const userInfo = await client.users.info({ user }) as any;
-
-    await client.chat.postMessage({
+    const userInfo = yield client.users.info({ user });
+    yield client.chat.postMessage({
         channel: "C07B5P6UFEX",
         text: `ユーザー @${userInfo.user.name}からの休み報告:\n*理由:* ${reason}`
     });
-});
-
-app.action('report-click', async ({ ack, body, client }) => {
-    await ack();
-    const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string, user: { id: string } };
+}));
+app.action('report-click', (_a) => __awaiter(void 0, [_a], void 0, function* ({ ack, body, client }) {
+    yield ack();
+    const actionsBody = body;
     const { date, event } = JSON.parse(actionsBody.actions[0].value);
     try {
         if (body.type !== 'block_actions' || !body.view) {
             return;
         }
-        await client.views.update({
+        yield client.views.update({
             view_id: body.view.id,
             hash: body.view.hash,
             view: {
@@ -177,20 +180,20 @@ app.action('report-click', async ({ ack, body, client }) => {
                 }
             }
         });
-    } catch (error) {
+    }
+    catch (error) {
         console.error(error);
-        await client.chat.postMessage({
+        yield client.chat.postMessage({
             channel: actionsBody.user.id,
             text: '休み報告のモーダルを開けませんでした。'
         });
     }
-});
-
-app.action('detail-clic', async ({ ack, body, client }) => {
-    await ack();
-    const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string };
+}));
+app.action('detail-clic', (_a) => __awaiter(void 0, [_a], void 0, function* ({ ack, body, client }) {
+    yield ack();
+    const actionsBody = body;
     const { date, event, desc } = JSON.parse(actionsBody.actions[0].value);
-    await client.views.open({
+    yield client.views.open({
         trigger_id: actionsBody.trigger_id,
         view: {
             type: 'modal',
@@ -223,12 +226,11 @@ app.action('detail-clic', async ({ ack, body, client }) => {
             ]
         }
     });
-});
-
-app.command('/event', async ({ command, ack, respond }) => {
-    await ack();
-    const root = process.env.FIREBASE_RULE as string;
-    const querySnapshot = await getDocs(collection(db, "events", root, "event"));
+}));
+app.command('/event', (_a) => __awaiter(void 0, [_a], void 0, function* ({ command, ack, respond }) {
+    yield ack();
+    const root = process.env.FIREBASE_RULE;
+    const querySnapshot = yield (0, firestore_1.getDocs)((0, firestore_1.collection)(firebase_1.db, "events", root, "event"));
     const events = querySnapshot.docs.map(doc => {
         const event = doc.data();
         return {
@@ -252,8 +254,7 @@ app.command('/event', async ({ command, ack, respond }) => {
             }
         };
     });
-
-    await respond({
+    yield respond({
         blocks: [
             {
                 type: 'header',
@@ -265,16 +266,15 @@ app.command('/event', async ({ command, ack, respond }) => {
             ...events
         ],
     });
-});
-
-app.command('/desctop', async ({ command, ack, respond }) => {
-    await ack();
+}));
+app.command('/desctop', (_a) => __awaiter(void 0, [_a], void 0, function* ({ command, ack, respond }) {
+    yield ack();
     const computerId = command.text;
     const status = Math.random() > 0.5 ? 'on' : 'off';
-    await respond(`パソコン${computerId}は${status === 'on' ? '使用中' : '使用されていません'}です。`);
-});
-
-(async () => {
-    await app.start(process.env.PORT || 3000);
+    yield respond(`パソコン${computerId}は${status === 'on' ? '使用中' : '使用されていません'}です。`);
+}));
+(() => __awaiter(void 0, void 0, void 0, function* () {
+    yield app.start(process.env.PORT || 3000);
     console.log('⚡️ Bolt app is running!');
-})();
+}))();
+//# sourceMappingURL=app.js.map
