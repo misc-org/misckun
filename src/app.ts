@@ -5,6 +5,58 @@ import { addDoc, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/fi
 
 dotenv.config();
 
+function convertToMarkdown(elements: any[]): string {
+    let markdown = '';
+
+    for (const element of elements) {
+        switch (element.type) {
+            case 'rich_text_list':
+                element.elements.forEach((listElement: any) => {
+                    markdown += `• ${convertToMarkdown([listElement])}\n`;
+                });
+                break;
+            case 'rich_text_section':
+                element.elements.forEach((sectionElement: any) => {
+                    let text = sectionElement.text;
+                    if (sectionElement.style) {
+                        if (sectionElement.style.code) {
+                            text = `\`${text}\``;
+                        }
+                        if (sectionElement.style.bold) {
+                            text = `*${text}*`;
+                        }
+                        if (sectionElement.style.italic) {
+                            text = `_${text}_`;
+                        }
+                        if (sectionElement.style.strike) {
+                            text = `~${text}~`;
+                        }
+                    }
+                    markdown += `${text}\n`;
+                });
+                break;
+            case 'rich_text_quote':
+                element.elements.forEach((quoteElement: any) => {
+                    markdown += `>${quoteElement.text}\n`;
+                });
+                break;
+            case 'rich_text_preformatted':
+                markdown += `\`\`\`${element.elements[0].text}\`\`\``;
+                break;
+            case 'rich_text_link':
+                markdown += `[${element.elements[0].text}](${element.elements[0].url})`;
+                break;
+            case 'rich_text_broadcast':
+                markdown += `@channel`;
+                break;
+            default:
+                console.log(`Unknown type: ${element.type}`);
+        }
+    }
+
+    return markdown;
+}
+
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -36,8 +88,6 @@ app.view('event-add', async ({ ack, body, view, logger, client }) => {
 
     const root = process.env.FIREBASE_RULE as string
 
-    console.log(val.desc.desc.rich_text_value?.elements);
-
     try {
         await addDoc(collection(db, 'events', root, 'event'), {
             event,
@@ -45,8 +95,16 @@ app.view('event-add', async ({ ack, body, view, logger, client }) => {
             desc: val.desc.desc.rich_text_value?.elements,
             grade: val.grade.grade.selected_options?.map(option => option.value) || []
         });
+
+        let desc = null
+
+        if (val.desc.desc.rich_text_value?.elements === undefined) {
+            return;
+        } else {
+            desc = convertToMarkdown(val.desc.desc.rich_text_value?.elements);
+        }
         await client.chat.postMessage({
-            channel: body.user.id,
+            channel: 'C07B08ENKUK',
             blocks: [
                 {
                     type: 'header',
@@ -56,31 +114,20 @@ app.view('event-add', async ({ ack, body, view, logger, client }) => {
                     }
                 },
                 {
+                    type: 'divider'
+                },
+                {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: `*イベント名*: ${event}`
+                        text: `<!channel>\n*イベント名*: ${event}\n*日付*: ${date}\n*参加学年*: ${val.grade.grade.selected_options?.map(option => option.text.text).join(', ')}`
                     }
                 },
                 {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: `*日付*: ${date}`
-                    }
-                },
-                {
-                    type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: `参加学年: ${val.grade.grade.selected_options?.map(option => option.text.text).join(', ')}`
-                    }
-                },
-                {
-                    type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: `詳細: ${val.desc.desc.rich_text_value?.elements?.map(element => element.text).join('')}`
+                        text: `*詳細*:\n ${desc}`
                     }
                 }
             ]
@@ -305,51 +352,286 @@ app.action('report-click', async ({ ack, body, client }) => {
     }
 });
 
-app.action('detail-clic', async ({ ack, body, client }) => {
+app.view('event-edit', async ({ ack, body, view, logger, client }) => {
+    logger.info(body);
     await ack();
-    const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string };
-    const { date, event, desc } = JSON.parse(actionsBody.actions[0].value);
-    await client.views.open({
-        trigger_id: actionsBody.trigger_id,
-        view: {
-            type: 'modal',
-            title: {
-                type: 'plain_text',
-                text: 'イベント詳細'
-            },
+
+    const val = view.state.values
+    const event = val.event.event.value
+    const date = val.date.date.selected_date
+
+    const root = process.env.FIREBASE_RULE as string
+
+    const { id } = repoDB as { id: string };
+
+    if (!root || !id) {
+        return;
+    }
+
+    try {
+        await updateDoc(doc(db, 'events', root, 'event', id), {
+            event,
+            date,
+            desc: val.desc.desc.rich_text_value?.elements,
+            grade: val.grade.grade.selected_options?.map(option => option.value) || []
+        });
+
+        let desc = null
+
+        if (val.desc.desc.rich_text_value?.elements === undefined) {
+            return;
+        } else {
+            desc = convertToMarkdown(val.desc.desc.rich_text_value?.elements);
+        }
+        await client.chat.postMessage({
+            channel: 'C07B08ENKUK',
             blocks: [
+                {
+                    type: 'header',
+                    text: {
+                        type: 'plain_text',
+                        text: 'イベントが編集されました。'
+                    }
+                },
+                {
+                    type: 'divider'
+                },
                 {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
+                        text: `<!channel>\n*イベント名*: ${event}\n*日付*: ${date}\n*参加学年*: ${val.grade.grade.selected_options?.map(option => option.text.text).join(', ')}`
                     }
                 },
                 {
-                    type: 'actions',
-                    elements: [
-                        {
-                            type: 'button',
-                            text: {
-                                type: 'plain_text',
-                                text: '欠席を報告する'
-                            },
-                            action_id: 'report-click',
-                            value: actionsBody.actions[0].value
-                        }
-                    ]
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*詳細*:\n ${desc}`
+                    }
                 }
             ]
+        });
+    } catch (error) {
+        logger.error(error);
+        await client.chat.postMessage({
+            channel: body.user.id,
+            text: 'イベントの編集に失敗しました。'
+        });
+    }
+});
+
+app.action('edit-click', async ({ ack, body, client }) => {
+    ack();
+    const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string, user: { id: string } };
+    const { date, event, desc, id } = JSON.parse(actionsBody.actions[0].value);
+
+    try {
+        if (body.type !== 'block_actions' || !body.view) {
+            return;
         }
-    });
+        repoDB = {};
+        client.views.update({
+            view_id: body.view.id,
+            hash: body.view.hash,
+            view: {
+                type: 'modal',
+                callback_id: 'event-edit',
+                title: {
+                    type: 'plain_text',
+                    text: 'イベント編集'
+                },
+                blocks: [
+                    {
+                        type: 'input',
+                        block_id: 'event',
+                        element: {
+                            type: 'plain_text_input',
+                            action_id: 'event',
+                            initial_value: event.text
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: 'イベント'
+                        }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'desc',
+                        element: {
+                            type: 'rich_text_input',
+                            action_id: 'desc',
+                            initial_value: {
+                                type: 'rich_text',
+                                elements: desc.text
+                            }
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: '詳細'
+                        }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'date',
+                        element: {
+                            type: 'datepicker',
+                            action_id: 'date',
+                            initial_date: date.text
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: '日付'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        block_id: 'grade',
+                        text: {
+                            type: 'plain_text',
+                            text: '参加学年'
+                        },
+                        accessory: {
+                            type: 'multi_static_select',
+                            action_id: 'grade',
+                            options: [
+                                {
+                                    text: {
+                                        type: 'plain_text',
+                                        text: '1年'
+                                    },
+                                    value: '1'
+                                },
+                                {
+                                    text: {
+                                        type: 'plain_text',
+                                        text: '2年'
+                                    },
+                                    value: '2'
+                                },
+                                {
+                                    text: {
+                                        type: 'plain_text',
+                                        text: '3年'
+                                    },
+                                    value: '3'
+                                }
+                            ]
+                        }
+                    }
+                ],
+                submit: {
+                    type: 'plain_text',
+                    text: '編集'
+                }
+            }
+        });
+
+        repoDB = { id, date: date.text, event: event.text };
+    } catch (error) {
+        console.error(error);
+        await client.chat.postMessage({
+            channel: actionsBody.user.id,
+            text: 'イベントの編集に失敗しました。'
+        });
+    }
+});
+
+app.action('detail-clic', async ({ ack, body, client }) => {
+    await ack();
+    const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string };
+    const { date, event, desc, is_admin } = JSON.parse(actionsBody.actions[0].value);
+    if (is_admin) {
+        await client.views.open({
+            trigger_id: actionsBody.trigger_id,
+            view: {
+                type: 'modal',
+                title: {
+                    type: 'plain_text',
+                    text: 'イベント詳細'
+                },
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: {
+                                    type: 'plain_text',
+                                    text: '欠席を報告する'
+                                },
+                                action_id: 'report-click',
+                                value: actionsBody.actions[0].value
+                            },
+                            {
+                                type: 'button',
+                                text: {
+                                    type: 'plain_text',
+                                    text: '編集'
+                                },
+                                action_id: 'edit-click',
+                                value: actionsBody.actions[0].value
+                            }
+                        ]
+                    }
+                ]
+            }
+        });
+    } else {
+        await client.views.open({
+            trigger_id: actionsBody.trigger_id,
+            view: {
+                type: 'modal',
+                title: {
+                    type: 'plain_text',
+                    text: 'イベント詳細'
+                },
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: {
+                                    type: 'plain_text',
+                                    text: '欠席を報告する'
+                                },
+                                action_id: 'report-click',
+                                value: actionsBody.actions[0].value
+                            }
+                        ]
+                    }
+                ]
+            }
+        });
+    }
 });
 
 app.command('/event', async ({ command, ack, respond }) => {
     await ack();
     const root = process.env.FIREBASE_RULE as string;
     const querySnapshot = await getDocs(collection(db, "events", root, "event"));
+
     const currentDate = new Date();
     currentDate.setHours(0, 0, 0, 0);
+
+    const is_admin = await app.client.users.info({ user: command.user_id });
+
+
     const events = querySnapshot.docs
         .filter(doc => {
             const event = doc.data();
@@ -374,7 +656,8 @@ app.command('/event', async ({ command, ack, respond }) => {
                         date: { text: event.date },
                         event: { text: event.event },
                         desc: { text: event.desc },
-                        id: doc.id
+                        id: doc.id,
+                        is_admin: is_admin.user?.is_admin
                     }),
                     action_id: 'detail-clic'
                 }
