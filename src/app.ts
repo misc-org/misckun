@@ -1,7 +1,7 @@
 import { App, LogLevel } from '@slack/bolt';
 import { db } from './firebase';
 import dotenv from 'dotenv';
-import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -97,6 +97,18 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                                 type: 'plain_text',
                                 text: '日付'
                             }
+                        },
+                        {
+                            type: 'input',
+                            block_id: 'desc',
+                            element: {
+                                type: 'plain_text_input',
+                                action_id: 'desc'
+                            },
+                            label: {
+                                type: 'plain_text',
+                                text: '詳細'
+                            }
                         }
                     ],
                     submit: {
@@ -124,14 +136,14 @@ app.view('report', async ({ ack, body, view, client }) => {
 
     await client.chat.postMessage({
         channel: "C07B5P6UFEX",
-        text: `ユーザー @${userInfo.user.name}からの休み報告:\n*理由:* ${reason}`
+        text: `ユーザー @${userInfo.user.name}からの欠席報告:\n*理由:* ${reason}`
     });
 });
 
 app.action('report-click', async ({ ack, body, client }) => {
     await ack();
     const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string, user: { id: string } };
-    const { date, event } = JSON.parse(actionsBody.actions[0].value);
+    const { date, event, id } = JSON.parse(actionsBody.actions[0].value);
     try {
         if (body.type !== 'block_actions' || !body.view) {
             return;
@@ -144,7 +156,7 @@ app.action('report-click', async ({ ack, body, client }) => {
                 callback_id: 'report',
                 title: {
                     type: 'plain_text',
-                    text: '休み報告'
+                    text: '欠席報告'
                 },
                 blocks: [
                     {
@@ -169,15 +181,30 @@ app.action('report-click', async ({ ack, body, client }) => {
                 ],
                 submit: {
                     type: 'plain_text',
-                    text: '報告'
+                    text: '報告',
+                    value: actionsBody.actions[0].value
                 }
             }
         });
+
+        const root = process.env.FIREBASE_RULE as string;
+        const userName = (await client.users.info({ user: actionsBody.user.id })).user?.name ;
+        console.log(id)
+        if (!userName || !id) {
+            return;
+        }
+        await updateDoc(doc(db, 'events', root , 'event', id), {
+            absent: {
+                userName: userName,
+                reason: ''
+            }
+        });
+        console.log('update');
     } catch (error) {
         console.error(error);
         await client.chat.postMessage({
             channel: actionsBody.user.id,
-            text: '休み報告のモーダルを開けませんでした。'
+            text: '欠席報告のモーダルを開けませんでした。'
         });
     }
 });
@@ -209,7 +236,7 @@ app.action('detail-clic', async ({ ack, body, client }) => {
                             type: 'button',
                             text: {
                                 type: 'plain_text',
-                                text: '休みを報告する'
+                                text: '欠席を報告する'
                             },
                             action_id: 'report-click',
                             value: actionsBody.actions[0].value
@@ -242,7 +269,8 @@ app.command('/event', async ({ command, ack, respond }) => {
                 value: JSON.stringify({
                     date: { text: event.date },
                     event: { text: event.event },
-                    desc: { text: event.desc }
+                    desc: { text: event.desc },
+                    id: doc.id
                 }),
                 action_id: 'detail-clic'
             }
