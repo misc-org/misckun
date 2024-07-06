@@ -36,14 +36,54 @@ app.view('event-add', async ({ ack, body, view, logger, client }) => {
 
     const root = process.env.FIREBASE_RULE as string
 
+    console.log(val.desc.desc.rich_text_value?.elements);
+
     try {
         await addDoc(collection(db, 'events', root, 'event'), {
             event,
-            date
+            date,
+            desc: val.desc.desc.rich_text_value?.elements,
+            grade: val.grade.grade.selected_options?.map(option => option.value) || []
         });
         await client.chat.postMessage({
             channel: body.user.id,
-            text: 'イベントを追加しました。'
+            blocks: [
+                {
+                    type: 'header',
+                    text: {
+                        type: 'plain_text',
+                        text: 'イベントが追加されました。'
+                    }
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*イベント名*: ${event}`
+                    }
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*日付*: ${date}`
+                    }
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `参加学年: ${val.grade.grade.selected_options?.map(option => option.text.text).join(', ')}`
+                    }
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `詳細: ${val.desc.desc.rich_text_value?.elements?.map(element => element.text).join('')}`
+                    }
+                }
+            ]
         });
     } catch (error) {
         logger.error(error);
@@ -88,6 +128,18 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                         },
                         {
                             type: 'input',
+                            block_id: 'desc',
+                            element: {
+                                type: 'rich_text_input',
+                                action_id: 'desc'
+                            },
+                            label: {
+                                type: 'plain_text',
+                                text: '詳細'
+                            }
+                        },
+                        {
+                            type: 'input',
                             block_id: 'date',
                             element: {
                                 type: 'datepicker',
@@ -99,15 +151,38 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
                             }
                         },
                         {
-                            type: 'input',
-                            block_id: 'desc',
-                            element: {
-                                type: 'plain_text_input',
-                                action_id: 'desc'
-                            },
-                            label: {
+                            type: 'section',
+                            block_id: 'grade',
+                            text: {
                                 type: 'plain_text',
-                                text: '詳細'
+                                text: '参加学年'
+                            },
+                            accessory: {
+                                type: 'multi_static_select',
+                                action_id: 'grade',
+                                options: [
+                                    {
+                                        text: {
+                                            type: 'plain_text',
+                                            text: '1年'
+                                        },
+                                        value: '1'
+                                    },
+                                    {
+                                        text: {
+                                            type: 'plain_text',
+                                            text: '2年'
+                                        },
+                                        value: '2'
+                                    },
+                                    {
+                                        text: {
+                                            type: 'plain_text',
+                                            text: '3年'
+                                        },
+                                        value: '3'
+                                    }
+                                ]
                             }
                         }
                     ],
@@ -126,18 +201,44 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
     }
 });
 
+let repoDB: {id: string, userName: string, date: string, event: string} | {} = {};
+
 app.view('report', async ({ ack, body, view, client }) => {
     await ack();
 
     const user = body.user.id;
     const values = view.state.values;
     const reason = values.reason.reason.value;
-    const userInfo = await client.users.info({ user }) as any;
+
+    const root = process.env.FIREBASE_RULE as string;
+    if (!repoDB || !('id' in repoDB) || !('userName' in repoDB)) {
+        return;
+    }
+    const { id, userName } = repoDB;
+    await updateDoc(doc(db, 'events', root, 'event', id), {
+        absent: {
+            user: {
+                id: user,
+                name: userName,
+                reason
+            }
+        }
+    });
 
     await client.chat.postMessage({
         channel: "C07B5P6UFEX",
-        text: `ユーザー @${userInfo.user.name}からの欠席報告:\n*理由:* ${reason}`
+        blocks: [
+            {
+                type: "section",
+                text: {
+                    type: "mrkdwn",
+                    text: `ユーザー <@${user}>からの欠席報告:\n*日付:* ${repoDB['date']}\n*イベント:* ${repoDB['event']}\n*理由:* ${reason}`
+                }
+            }
+        ]
     });
+
+    repoDB = {};
 });
 
 app.action('report-click', async ({ ack, body, client }) => {
@@ -148,6 +249,7 @@ app.action('report-click', async ({ ack, body, client }) => {
         if (body.type !== 'block_actions' || !body.view) {
             return;
         }
+        repoDB = {};
         await client.views.update({
             view_id: body.view.id,
             hash: body.view.hash,
@@ -160,11 +262,14 @@ app.action('report-click', async ({ ack, body, client }) => {
                 },
                 blocks: [
                     {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: `*日付:* ${date}\n*イベント:* ${event}`
-                        }
+                        type: 'context',
+                        block_id: 'info',
+                        elements: [
+                            {
+                                type: 'mrkdwn',
+                                text: `*日付:* ${date.text}\n*イベント:* ${event.text}`
+                            }
+                        ]
                     },
                     {
                         type: 'input',
@@ -182,24 +287,15 @@ app.action('report-click', async ({ ack, body, client }) => {
                 submit: {
                     type: 'plain_text',
                     text: '報告',
-                    value: actionsBody.actions[0].value
                 }
             }
         });
 
-        const root = process.env.FIREBASE_RULE as string;
         const userName = (await client.users.info({ user: actionsBody.user.id })).user?.name ;
-        console.log(id)
         if (!userName || !id) {
             return;
         }
-        await updateDoc(doc(db, 'events', root , 'event', id), {
-            absent: {
-                userName: userName,
-                reason: ''
-            }
-        });
-        console.log('update');
+        repoDB = { id, userName, date: date.text, event: event.text};
     } catch (error) {
         console.error(error);
         await client.chat.postMessage({
@@ -252,29 +348,37 @@ app.command('/event', async ({ command, ack, respond }) => {
     await ack();
     const root = process.env.FIREBASE_RULE as string;
     const querySnapshot = await getDocs(collection(db, "events", root, "event"));
-    const events = querySnapshot.docs.map(doc => {
-        const event = doc.data();
-        return {
-            type: 'section',
-            text: {
-                type: 'mrkdwn',
-                text: `*日付:* ${event.date}\n*イベント:* ${event.event}`
-            },
-            accessory: {
-                type: 'button',
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+    const events = querySnapshot.docs
+        .filter(doc => {
+            const event = doc.data();
+            const eventDate = new Date(event.date);
+            return eventDate >= currentDate;
+        })
+        .map(doc => {
+            const event = doc.data();
+            return {
+                type: 'section',
                 text: {
-                    type: 'plain_text',
-                    text: '詳細を見る'
+                    type: 'mrkdwn',
+                    text: `*日付:* ${event.date}\n*イベント:* ${event.event}`
                 },
-                value: JSON.stringify({
-                    date: { text: event.date },
-                    event: { text: event.event },
-                    desc: { text: event.desc },
-                    id: doc.id
-                }),
-                action_id: 'detail-clic'
-            }
-        };
+                accessory: {
+                    type: 'button',
+                    text: {
+                        type: 'plain_text',
+                        text: '詳細を見る'
+                    },
+                    value: JSON.stringify({
+                        date: { text: event.date },
+                        event: { text: event.event },
+                        desc: { text: event.desc },
+                        id: doc.id
+                    }),
+                    action_id: 'detail-clic'
+                }
+            };
     });
 
     await respond({
