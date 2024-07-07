@@ -3,7 +3,7 @@ import { db } from './firebase';
 import dotenv from 'dotenv';
 import { addDoc, collection, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { exec } from 'child_process';
-import fetch from 'node-fetch';
+import axios from 'axios';
 
 dotenv.config();
 
@@ -243,9 +243,9 @@ app.command('/rule', async ({ command, ack, client }) => {
     await ack();
     let rules;
     if (command.text === 'misc') {
-        rules = await fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/rules.md').then(res => res.text()) || 'ルールが取得できませんでした。';
+        rules = await axios.get('https://raw.githubusercontent.com/misc-org/common-archives/main/misc.md').then(res => res.data) || 'ルールが取得できませんでした。';
     } else if (command.text === 'slack') {
-        rules = await fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.text()) || 'ルールが取得できませんでした。';
+        rules = await axios.get('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.data) || 'ルールが取得できませんでした。';
     } else {
         rules = '正しい引数を指定してください。';
     }
