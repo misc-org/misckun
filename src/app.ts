@@ -243,7 +243,7 @@ app.command('/rule', async ({ command, ack, client }) => {
     await ack();
     let rules;
     if (command.text === 'misc') {
-        rules = await axios.get('https://raw.githubusercontent.com/misc-org/common-archives/main/misc.md').then(res => res.data) || 'ルールが取得できませんでした。';
+        rules = await axios.get('https://raw.githubusercontent.com/misc-org/common-archives/main/rules.md').then(res => res.data) || 'ルールが取得できませんでした。';
     } else if (command.text === 'slack') {
         rules = await axios.get('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.data) || 'ルールが取得できませんでした。';
     } else {
