@@ -3,6 +3,7 @@ import { db } from './firebase';
 import dotenv from 'dotenv';
 import { addDoc, collection, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { exec } from 'child_process';
+import fetch from 'node-fetch';
 
 dotenv.config();
 
