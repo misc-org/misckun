@@ -17,6 +17,7 @@ const firebase_1 = require("./firebase");
 const dotenv_1 = __importDefault(require("dotenv"));
 const firestore_1 = require("firebase/firestore");
 const child_process_1 = require("child_process");
+const node_fetch_1 = __importDefault(require("node-fetch"));
 dotenv_1.default.config();
 function convertToMarkdown(elements) {
     let markdown = '';
@@ -238,10 +239,10 @@ app.command('/rule', (_a) => __awaiter(void 0, [_a], void 0, function* ({ comman
     yield ack();
     let rules;
     if (command.text === 'misc') {
-        rules = (yield fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/rules.md').then(res => res.text())) || 'ルールが取得できませんでした。';
+        rules = (yield (0, node_fetch_1.default)('https://raw.githubusercontent.com/misc-org/common-archives/main/rules.md').then(res => res.text())) || 'ルールが取得できませんでした。';
     }
     else if (command.text === 'slack') {
-        rules = (yield fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.text())) || 'ルールが取得できませんでした。';
+        rules = (yield (0, node_fetch_1.default)('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.text())) || 'ルールが取得できませんでした。';
     }
     else {
         rules = '正しい引数を指定してください。';
