@@ -1,7 +1,8 @@
-import { App, LogLevel } from '@slack/bolt';
+import { App, Button, Checkboxes, Datepicker, DateTimepicker, LogLevel, MultiSelect, Overflow, RadioButtons, RichTextInput, Select, Timepicker, WorkflowButton } from '@slack/bolt';
 import { db } from './firebase';
 import dotenv from 'dotenv';
 import { addDoc, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { exec } from 'child_process';
 
 dotenv.config();
 
@@ -64,18 +65,187 @@ const app = new App({
 });
 
 app.event('app_home_opened', async ({ event, client, ack }) => {
-    await client.chat.postMessage({
-        channel: event.channel,
-        text: 'こんにちは！私は部活動サポートボットです。'
-    });
+    try {
+        const user = event.user;
+        const root = process.env.FIREBASE_RULE as string;
+
+        interface EventData {
+            date: Date;
+            id: string;
+            event?: string;
+            desc?: string;
+        }
+
+        const querySnapshot = await getDocs(collection(db, 'events', root, 'event'));
+
+        const currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0);
+
+        const events = querySnapshot.docs
+            .map(doc => ({ ...doc.data() as EventData, date: new Date(doc.data().date), id: doc.id }))
+            .filter(({ date }) => date >= currentDate)
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .slice(0, 3)
+            .map(doc => {
+                const date = new Date(doc.date);
+                const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                return {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*日付:* ${formattedDate}\n*イベント:* ${doc.event}`
+                    },
+                    accessory: {
+                        type: 'button',
+                        text: {
+                            type: 'plain_text',
+                            text: '詳細を見る'
+                        },
+                        value: JSON.stringify({
+                            date: { text: doc.date },
+                            event: { text: doc.event },
+                            desc: { text: doc.desc },
+                            id: doc.id,
+                            is_admin: false
+                        }),
+                        action_id: 'detail-clic'
+                    }
+                };
+            });
+
+        await client.views.publish({
+            user_id: user,
+            view: {
+                type: 'home',
+                blocks: [
+                    {
+                        type: 'image',
+                        image_url: 'https://raw.githubusercontent.com/misc-org/.github/main/images/background.png',
+                        alt_text: 'MISC'
+                    },
+                    {
+                        type: 'header',
+                        text: {
+                            type: 'plain_text',
+                            text: 'MISC の 公式BOT misckun へようこそ！'
+                        }
+                    },
+                    {
+                        type: 'divider'
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: 'ここでは、BOT に関する情報やイベント情報を確認することができます。'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: 'BOT の使い方については、 `/help` と入力してください。\nまた、BOT がうまく作動していないと感じた時は、担当者（<@kishintorii>）までご連絡ください！'
+                        }
+                    },
+                    {
+                        type: 'header',
+                        text: {
+                            type: 'plain_text',
+                            text: 'イベント一覧 (3件まで)'
+                        }
+                    },
+                    {
+                        type: 'divider'
+                    },
+                    ...events,
+                    {
+                        type: 'header',
+                        text: {
+                            type: 'plain_text',
+                            text: 'コマンド'
+                        }
+                    },
+                    {
+                        type: 'divider'
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '`/rule`'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '*slack*に関するルールを確認する場合は、 `/rule slack` と入力してください。\n*misc*に関するルールを確認する場合は、 `/rule misc` と入力してください。'
+                        },
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '`/event`'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: 'イベント一覧を確認する場合は、 `/event` と入力してください。\n「詳細を見る」を押すことで、イベントの詳細確認と、出血連絡を行うことができます。'
+                        },
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '`/desctop`'
+                        },
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: 'パソコンの起動状態を確認する場合は、 `/desctop` と入力してください。'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '`/add-event` *管理者限定コマンド*'
+                        }
+                    },
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: 'イベントを追加する場合は、 `/add-event` と入力してください。'
+                        }
+                    },
+                ]
+            }
+        });
+    } catch (error) {
+        console.error(error);
+    }
 });
 
-app.command('/rule', async ({ command, ack, respond }) => {
+app.command('/rule', async ({ command, ack, client }) => {
     await ack();
-    const rules = `
-    1. 部室は清潔に保つ\n2. パソコンは丁寧に扱う\n3. 予定は必ずカレンダーに記入する
-  `;
-    await respond(rules);
+    let rules;
+    if (command.text === 'misc') {
+        rules = await fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/rules.md').then(res => res.text()) || 'ルールが取得できませんでした。';
+    } else if (command.text === 'slack') {
+        rules = await fetch('https://raw.githubusercontent.com/misc-org/common-archives/main/slack.md').then(res => res.text()) || 'ルールが取得できませんでした。';
+    } else {
+        rules = '正しい引数を指定してください。';
+    }
+    await client.chat.postMessage({
+        channel: command.user_id,
+        text: rules
+    });
 });
 
 app.view('event-add', async ({ ack, body, view, logger, client }) => {
@@ -248,7 +418,7 @@ app.command('/add-event', async ({ command, ack, body, client, logger, respond }
     }
 });
 
-let repoDB: {id: string, userName: string, date: string, event: string} | {} = {};
+let repoDB: { id: string, userName: string, date: string, event: string } | {} = {};
 
 app.view('report', async ({ ack, body, view, client }) => {
     await ack();
@@ -338,11 +508,11 @@ app.action('report-click', async ({ ack, body, client }) => {
             }
         });
 
-        const userName = (await client.users.info({ user: actionsBody.user.id })).user?.name ;
+        const userName = (await client.users.info({ user: actionsBody.user.id })).user?.name;
         if (!userName || !id) {
             return;
         }
-        repoDB = { id, userName, date: date.text, event: event.text};
+        repoDB = { id, userName, date: date.text, event: event.text };
     } catch (error) {
         console.error(error);
         await client.chat.postMessage({
@@ -419,6 +589,8 @@ app.view('event-edit', async ({ ack, body, view, logger, client }) => {
             text: 'イベントの編集に失敗しました。'
         });
     }
+
+    repoDB = {};
 });
 
 app.action('edit-click', async ({ ack, body, client }) => {
@@ -541,87 +713,58 @@ app.action('detail-clic', async ({ ack, body, client }) => {
     await ack();
     const actionsBody = body as unknown as { actions: [{ value: string }], trigger_id: string };
     const { date, event, desc, is_admin } = JSON.parse(actionsBody.actions[0].value);
+
+    let elements: (Button | Checkboxes | Datepicker | DateTimepicker | MultiSelect | Overflow | RadioButtons | Select | Timepicker | WorkflowButton | RichTextInput)[] = [
+        {
+            type: 'button',
+            text: {
+                type: 'plain_text',
+                text: '欠席を報告する'
+            },
+            action_id: 'report-click',
+            value: actionsBody.actions[0].value
+        }
+    ];
+
     if (is_admin) {
-        await client.views.open({
-            trigger_id: actionsBody.trigger_id,
-            view: {
-                type: 'modal',
-                title: {
-                    type: 'plain_text',
-                    text: 'イベント詳細'
-                },
-                blocks: [
-                    {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
-                        }
-                    },
-                    {
-                        type: 'actions',
-                        elements: [
-                            {
-                                type: 'button',
-                                text: {
-                                    type: 'plain_text',
-                                    text: '欠席を報告する'
-                                },
-                                action_id: 'report-click',
-                                value: actionsBody.actions[0].value
-                            },
-                            {
-                                type: 'button',
-                                text: {
-                                    type: 'plain_text',
-                                    text: '編集'
-                                },
-                                action_id: 'edit-click',
-                                value: actionsBody.actions[0].value
-                            }
-                        ]
-                    }
-                ]
-            }
-        });
-    } else {
-        await client.views.open({
-            trigger_id: actionsBody.trigger_id,
-            view: {
-                type: 'modal',
-                title: {
-                    type: 'plain_text',
-                    text: 'イベント詳細'
-                },
-                blocks: [
-                    {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
-                        }
-                    },
-                    {
-                        type: 'actions',
-                        elements: [
-                            {
-                                type: 'button',
-                                text: {
-                                    type: 'plain_text',
-                                    text: '欠席を報告する'
-                                },
-                                action_id: 'report-click',
-                                value: actionsBody.actions[0].value
-                            }
-                        ]
-                    }
-                ]
-            }
+        elements.push({
+            type: 'button',
+            text: {
+                type: 'plain_text',
+                text: '編集する'
+            },
+            action_id: 'edit-click',
+            value: actionsBody.actions[0].value
         });
     }
+
+    await client.views.open({
+        trigger_id: actionsBody.trigger_id,
+        view: {
+            type: 'modal',
+            title: {
+                type: 'plain_text',
+                text: 'イベント詳細'
+            },
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*日付:* ${date.text}\n*イベント:* ${event.text}\n*詳細:* ${desc.text}`
+                    }
+                },
+                {
+                    type: 'actions',
+                    elements: elements
+                }
+            ]
+        }
+    });
 });
 
-app.command('/event', async ({ command, ack, respond }) => {
+
+app.command('/event', async ({ command, ack, client }) => {
     await ack();
     const root = process.env.FIREBASE_RULE as string;
     const querySnapshot = await getDocs(collection(db, "events", root, "event"));
@@ -662,9 +805,10 @@ app.command('/event', async ({ command, ack, respond }) => {
                     action_id: 'detail-clic'
                 }
             };
-    });
+        });
 
-    await respond({
+    await client.chat.postMessage({
+        channel: command.user_id,
         blocks: [
             {
                 type: 'header',
@@ -673,16 +817,52 @@ app.command('/event', async ({ command, ack, respond }) => {
                     text: 'イベント一覧'
                 }
             },
+            {
+                type: 'divider'
+            },
             ...events
-        ],
+        ]
     });
 });
 
-app.command('/desctop', async ({ command, ack, respond }) => {
+app.command('/desctop', async ({ command, ack, client }) => {
     await ack();
     const computerId = command.text;
-    const status = Math.random() > 0.5 ? 'on' : 'off';
-    await respond(`パソコン${computerId}は${status === 'on' ? '使用中' : '使用されていません'}です。`);
+
+    if (!computerId) {
+        await client.chat.postMessage({
+            channel: command.user_id,
+            text: 'パソコンのIDを指定してください。'
+        });
+        return;
+    }
+
+    ///desctop 126.23.238.24
+
+    exec(`ping -n 1 ${computerId}`, async (error, stdout: string | string[], stderr: any) => {
+        if (error) {
+            console.log(`error: ${error.message}`);
+            await client.chat.postMessage({
+                channel: command.user_id,
+                text: `パソコン${computerId}の状態を確認できませんでした。`
+            });
+            return;
+        }
+        if (stderr) {
+            console.log(`stderr: ${stderr}`);
+            await client.chat.postMessage({
+                channel: command.user_id,
+                text: `パソコン${computerId}の状態を確認できませんでした。`
+            });
+            return;
+        }
+
+        const status = stdout.includes('1 packets transmitted, 1 received') ? 'on' : 'off';
+        await client.chat.postMessage({
+            channel: command.user_id,
+            text: `パソコン${computerId}は${status}です。`
+        });
+    });
 });
 
 (async () => {
