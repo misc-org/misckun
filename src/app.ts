@@ -1,7 +1,7 @@
 import { App, Button, Checkboxes, Datepicker, DateTimepicker, LogLevel, MultiSelect, Overflow, RadioButtons, RichTextInput, Select, Timepicker, WorkflowButton } from '@slack/bolt';
 import { db } from './firebase';
 import dotenv from 'dotenv';
-import { addDoc, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { exec } from 'child_process';
 
 dotenv.config();
@@ -179,7 +179,7 @@ app.event('app_home_opened', async ({ event, client, ack }) => {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: '*slack*に関するルールを確認する場合は、 `/rule slack` と入力してください。\n*misc*に関するルールを確認する場合は、 `/rule misc` と入力してください。'
+                            text: '*slack* に関するルールを確認する場合は、 `/rule slack` と入力してください。\n*misc* に関するルールを確認する場合は、 `/rule misc` と入力してください。'
                         },
                     },
                     {
@@ -230,6 +230,12 @@ app.event('app_home_opened', async ({ event, client, ack }) => {
     } catch (error) {
         console.error(error);
     }
+});
+
+app.command('/help', async ({ command, ack, respond }) => {
+    await ack();
+    await respond('下記のリンクから、misckun の使い方を確認してください。\nhttps://github.com/misc-org/misckun/README.md');
+    await respond('また、BOT がうまく作動していないと感じた時は、担当者（<@kishintorii>）までご連絡ください！');
 });
 
 app.command('/rule', async ({ command, ack, client }) => {
